@@ -1,0 +1,170 @@
+// ─── Shared mixin for live-stream portal layouts ──────────────────────────────
+// Used by: xtream live-stream-layout, stalker live-stream-layout,
+//           portal-collection-live-shell
+//
+// Include this mixin in a component's SCSS to get the shared flex host+sidebar
+// skeleton, then add only the component-specific rules underneath.
+//
+// Usage (after adding libs/ui/styles to stylePreprocessorOptions.includePaths):
+//   @use 'portal-layout' as portal;
+//   @include portal.live-layout;
+
+@mixin live-layout {
+    :host {
+        display: flex;
+        flex-direction: row;
+        overflow: hidden;
+        height: 100%;
+        width: 100%;
+    }
+
+    // ─── Sidebar ─────────────────────────────────────────────────────────────
+    .sidebar {
+        // Width controlled by the resizable directive at runtime
+        width: 400px;
+        min-width: 250px;
+        max-width: 600px;
+        border-right: 1px solid var(--app-separator);
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        overflow: hidden;
+        position: relative;
+        container-type: inline-size;
+        transition:
+            width 0.18s ease,
+            min-width 0.18s ease,
+            border-color 0.18s ease;
+
+        &.sidebar-collapsed {
+            // Beats the inline width set by the resizable directive while
+            // preserving it so uncollapsing snaps back to the previous size.
+            width: 0 !important;
+            min-width: 0 !important;
+            border-right-color: transparent;
+        }
+
+        &.sidebar-collapsed .resize-handle {
+            display: none;
+        }
+
+        app-category-view {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            margin-right: 2px;
+        }
+    }
+
+    // ─── Main content column ─────────────────────────────────────────────────
+    .content-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-height: 0;
+        position: relative;
+    }
+
+    // ─── Floating restore handle (visible when sidebar is collapsed) ─────────
+    // Anchored top-left of .content-container so it sits in roughly the same
+    // spot as the hide toggle that lived at the sidebar header's top-right.
+    .sidebar-restore {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        // Player internals, including the radio audio stage, may use z-index
+        // 2 inside the content area. Keep the restore affordance above them
+        // for both paint order and hit testing.
+        z-index: 5;
+        background: rgba(128, 128, 128, 0.18);
+        color: var(--mat-sys-on-surface, rgba(255, 255, 255, 0.75));
+        box-shadow: none;
+        opacity: 0.7;
+        transition:
+            opacity 0.15s ease,
+            background 0.15s ease;
+
+        .mat-mdc-button-persistent-ripple,
+        .mat-mdc-button-touch-target {
+            display: none;
+        }
+
+        mat-icon {
+            font-size: 20px;
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
+        }
+
+        &:hover,
+        &:focus-visible {
+            opacity: 1;
+            background: rgba(128, 128, 128, 0.32);
+        }
+    }
+
+    .video-player {
+        flex: 1 1 0;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+
+        > app-web-player-view {
+            flex: 1;
+            min-height: 0;
+        }
+    }
+
+    .content-container:has(> .epg.epg-collapsed)
+        .video-player
+        > app-web-player-view {
+        --web-player-diagnostic-bottom: 72px;
+    }
+
+    .epg {
+        flex: 1 1 0;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        transition:
+            flex-basis 0.18s ease,
+            min-height 0.18s ease;
+
+        &.epg-collapsed {
+            flex: 0 0 56px;
+            min-height: 56px;
+        }
+
+        > app-live-epg-panel {
+            flex: 1;
+            min-height: 0;
+        }
+    }
+
+    .epg-content {
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+
+        > app-epg-view,
+        > app-live-epg-panel {
+            flex: 1;
+            min-height: 0;
+        }
+    }
+
+    // ─── Fix artplayer sizing when nested inside .video-player ───────────────
+    ::ng-deep {
+        .video-player
+            > app-web-player-view
+            > app-art-player
+            > .artplayer-container {
+            height: 100% !important;
+            width: 100% !important;
+        }
+    }
+}

@@ -1,0 +1,120 @@
+<header class="workspace-header">
+    <app-playlist-switcher
+        class="playlist-switcher"
+        [currentTitle]="playlistTitle()"
+        [subtitle]="playlistSubtitle()"
+        [showPlaylistInfo]="canOpenPlaylistInfo()"
+        [showAccountInfo]="canOpenAccountInfo()"
+        [showAddPlaylist]="true"
+        [canRefreshActivePlaylist]="canRefreshPlaylist()"
+        [isRefreshingActivePlaylist]="isRefreshingPlaylist()"
+        (playlistInfoRequested)="onPlaylistInfoRequested()"
+        (accountInfoRequested)="onAccountInfoRequested()"
+        (addPlaylistRequested)="onAddPlaylistRequested()"
+        (refreshPlaylistRequested)="onRefreshPlaylistRequested()"
+    />
+
+    @if (!hasNoPlaylists()) {
+        <label class="search-field">
+            <mat-icon>search</mat-icon>
+            @if (searchScopeLabel()) {
+                <span class="search-chip search-chip--scope">
+                    {{ searchScopeLabel() }}
+                </span>
+            }
+            <input
+                type="search"
+                spellcheck="false"
+                [value]="searchQuery()"
+                (input)="onSearchInput($event)"
+                (keydown.enter)="onSearchEnter($event)"
+                [disabled]="!canUseSearch()"
+                [placeholder]="searchPlaceholder() | translate"
+                [attr.aria-label]="'WORKSPACE.SHELL.SEARCH_LABEL' | translate"
+            />
+            @if (searchStatusLabel()) {
+                <span class="search-chip search-chip--status">
+                    {{ searchStatusLabel() }}
+                </span>
+            }
+            <button
+                type="button"
+                class="command-trigger"
+                (click)="onCommandPaletteRequested()"
+                [matTooltip]="
+                    'WORKSPACE.SHELL.COMMAND_PALETTE_SHORTCUT' | translate
+                "
+                [attr.aria-label]="
+                    'WORKSPACE.SHELL.OPEN_COMMAND_PALETTE' | translate
+                "
+            >
+                {{ commandShortcutLabel }}
+            </button>
+        </label>
+    }
+
+    <div class="header-actions header-actions--leading">
+        <button
+            type="button"
+            mat-icon-button
+            (click)="onAddPlaylistRequested()"
+            [matTooltip]="'WORKSPACE.SHELL.ADD_PLAYLIST_ALL' | translate"
+            [attr.aria-label]="'WORKSPACE.SHELL.ADD_PLAYLIST' | translate"
+        >
+            <mat-icon>add</mat-icon>
+        </button>
+        @if (headerShortcut(); as action) {
+            <button
+                type="button"
+                class="header-shortcut"
+                mat-icon-button
+                (click)="onHeaderShortcutRequested()"
+                [matTooltip]="action.tooltipKey | translate"
+                [attr.aria-label]="action.ariaLabelKey | translate"
+            >
+                <mat-icon>{{ action.icon }}</mat-icon>
+            </button>
+        }
+        @if (headerBulkAction(); as bulk) {
+            <button
+                type="button"
+                class="header-shortcut header-bulk-action"
+                mat-icon-button
+                [disabled]="bulk.disabled"
+                (click)="onHeaderBulkActionRequested()"
+                [matTooltip]="bulk.tooltip"
+                [attr.aria-label]="bulk.ariaLabel"
+            >
+                <mat-icon>{{ bulk.icon }}</mat-icon>
+            </button>
+        }
+    </div>
+
+    @if (isElectron()) {
+        <div class="header-actions header-actions--trailing">
+            <span class="download-btn-wrap">
+                @if (hasActiveDownloads()) {
+                    <span class="download-activity-bar" aria-hidden="true">
+                        <span class="download-activity-bar__fill"></span>
+                    </span>
+                }
+                <button
+                    type="button"
+                    class="header-shortcut"
+                    mat-icon-button
+                    [class.is-active]="isDownloadsView()"
+                    [class.has-activity]="hasActiveDownloads()"
+                    (click)="onDownloadsRequested()"
+                    [matTooltip]="
+                        'WORKSPACE.SHELL.RAIL_DOWNLOADS' | translate
+                    "
+                    [attr.aria-label]="
+                        'WORKSPACE.SHELL.OPEN_DOWNLOADS' | translate
+                    "
+                >
+                    <mat-icon>download</mat-icon>
+                </button>
+            </span>
+        </div>
+    }
+</header>

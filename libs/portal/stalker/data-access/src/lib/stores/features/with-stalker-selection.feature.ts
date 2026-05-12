@@ -1,0 +1,113 @@
+import {
+    patchState,
+    signalStoreFeature,
+    withMethods,
+    withState,
+} from '@ngrx/signals';
+import { StalkerVodSource } from '../../models';
+import { normalizeStalkerEntityId } from '../../stalker-vod.utils';
+
+/**
+ * Selection/pagination/search feature state.
+ */
+export interface StalkerSelectionState {
+    selectedContentType: 'vod' | 'itv' | 'series' | 'radio';
+    selectedCategoryId: string | null | undefined;
+    selectedVodId: string | undefined;
+    selectedSerialId: string | undefined;
+    selectedItvId: string | undefined;
+    limit: number;
+    page: number;
+    searchPhrase: string;
+    selectedItem: StalkerVodSource | null | undefined;
+}
+
+const initialSelectionState: StalkerSelectionState = {
+    selectedContentType: 'vod',
+    selectedCategoryId: undefined,
+    selectedVodId: undefined,
+    selectedSerialId: undefined,
+    selectedItvId: undefined,
+    limit: 14,
+    page: 0,
+    searchPhrase: '',
+    selectedItem: undefined,
+};
+
+export function withStalkerSelection() {
+    return signalStoreFeature(
+        withState<StalkerSelectionState>(initialSelectionState),
+        withMethods((store) => ({
+            setSelectedContentType(
+                type: 'vod' | 'itv' | 'series' | 'radio'
+            ) {
+                patchState(store, { selectedContentType: type });
+            },
+            setSelectedCategory(id: string | number | null) {
+                const newId =
+                    id !== null && id !== undefined ? String(id) : null;
+                if (store.selectedCategoryId() === newId) {
+                    return;
+                }
+                patchState(store, {
+                    selectedCategoryId: newId,
+                    page: 0,
+                });
+            },
+            setSelectedSerialId(id: string) {
+                patchState(store, { selectedSerialId: id });
+            },
+            setSelectedVodId(id: string) {
+                patchState(store, { selectedVodId: id });
+            },
+            setSelectedItvId(id: string) {
+                patchState(store, { selectedItvId: id });
+            },
+            setLimit(limit: number) {
+                if (store.limit() === limit) {
+                    return;
+                }
+
+                patchState(store, { limit });
+            },
+            setPage(page: number) {
+                if (store.page() === page) {
+                    return;
+                }
+
+                patchState(store, { page });
+            },
+            setSearchPhrase(phrase: string) {
+                if (store.searchPhrase() === phrase) {
+                    return;
+                }
+
+                patchState(store, { searchPhrase: phrase, page: 0 });
+            },
+            setSelectedItem(selectedItem: StalkerVodSource | null | undefined) {
+                const selectedIdRaw =
+                    selectedItem?.id !== undefined && selectedItem?.id !== null
+                        ? selectedItem.id
+                        : undefined;
+                const selectedId =
+                    selectedIdRaw !== undefined
+                        ? normalizeStalkerEntityId(selectedIdRaw)
+                        : undefined;
+                patchState(store, {
+                    selectedVodId: selectedId,
+                    selectedSerialId: selectedId,
+                    selectedItvId: selectedId,
+                    selectedItem,
+                });
+            },
+            clearSelectedItem() {
+                patchState(store, {
+                    selectedVodId: undefined,
+                    selectedSerialId: undefined,
+                    selectedItvId: undefined,
+                    selectedItem: undefined,
+                });
+            },
+        }))
+    );
+}

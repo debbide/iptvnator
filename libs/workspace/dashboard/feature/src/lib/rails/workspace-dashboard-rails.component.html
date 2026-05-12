@@ -1,0 +1,206 @@
+<section
+    class="rails-page"
+    [class.rails-page--empty]="ready() && !hasPlaylists()"
+    data-test-id="dashboard-page"
+>
+    @if (data.playlistsLoaded() && !hasPlaylists()) {
+        <app-empty-state
+            [type]="'welcome-dashboard'"
+            [showElectronOnlyValueProps]="isElectron"
+            (addPlaylistClicked)="onAddPlaylist($event)"
+        />
+    } @else {
+        <!-- Hero: real card if a recent item resolved, skeleton while still
+             loading the first global recent item, nothing if no recent items
+             exist. Each block below renders as soon as ITS data is ready —
+             no longer pinned on the slowest rail's I/O. -->
+        @if (hero(); as item) {
+            <a
+                class="hero"
+                data-test-id="dashboard-hero"
+                [class.hero--with-image]="
+                    !!item.posterUrl || !!item.backdropUrl
+                "
+                [class.hero--has-backdrop]="item.hasBackdrop"
+                [class.hero--has-default-backdrop]="
+                    item.backdropSource === 'fallback'
+                "
+                [class.hero--live]="item.contentType === 'live'"
+                [routerLink]="item.link"
+                [state]="item.state ?? {}"
+            >
+                <span
+                    class="hero__backdrop"
+                    aria-hidden="true"
+                    [style.backgroundImage]="
+                        item.backdropUrl
+                            ? 'url(' + item.backdropUrl + ')'
+                            : item.fallbackBackdropBackground
+                    "
+                ></span>
+                @if (item.backdropUrl; as backdropUrl) {
+                    <img
+                        class="hero__image-probe"
+                        [src]="backdropUrl"
+                        alt=""
+                        aria-hidden="true"
+                        loading="eager"
+                        decoding="async"
+                        (error)="markHeroImageFailed(backdropUrl)"
+                    />
+                }
+                <span class="hero__vignette" aria-hidden="true"></span>
+
+                <span class="hero__poster">
+                    @if (item.posterUrl; as posterUrl) {
+                        <img
+                            [src]="posterUrl"
+                            [alt]="item.title"
+                            loading="eager"
+                            decoding="async"
+                            (error)="markHeroImageFailed(posterUrl)"
+                        />
+                    } @else {
+                        <span
+                            class="hero__poster-fallback"
+                            [style.backgroundImage]="
+                                item.fallbackPosterBackground
+                            "
+                        >
+                            <mat-icon>{{ item.icon }}</mat-icon>
+                        </span>
+                    }
+                </span>
+
+                <span class="hero__body">
+                    <h1 class="hero__title">{{ item.title }}</h1>
+                    <p class="hero__subtitle">{{ item.subtitle }}</p>
+
+                    <span class="hero__cta">
+                        <mat-icon>play_arrow</mat-icon>
+                        <span>{{
+                            'WORKSPACE.DASHBOARD.CONTINUE_WATCHING' | translate
+                        }}</span>
+                    </span>
+                </span>
+            </a>
+        } @else if (data.globalRecentLoading()) {
+            <section
+                class="rails-page__skeleton-hero"
+                aria-hidden="true"
+                aria-busy="true"
+            >
+                <div class="rails-page__skeleton-hero-poster"></div>
+                <div class="rails-page__skeleton-hero-body">
+                    <div class="rails-page__skeleton-hero-title"></div>
+                    <div
+                        class="rails-page__skeleton-hero-title rails-page__skeleton-hero-title--short"
+                    ></div>
+                    <div class="rails-page__skeleton-hero-subtitle"></div>
+                    <div class="rails-page__skeleton-hero-cta"></div>
+                </div>
+            </section>
+        }
+
+        <!-- Recently watched rail -->
+        @if (recentlyWatchedCards().length > 0) {
+            <lib-dashboard-rail
+                [label]="'WORKSPACE.DASHBOARD.RECENTLY_WATCHED' | translate"
+                [items]="recentlyWatchedCards()"
+                [totalCount]="data.globalRecentItems().length"
+                [seeAllLink]="['/workspace/global-recent']"
+                [testId]="'dashboard-recently-watched-rail'"
+            />
+        } @else if (data.globalRecentLoading()) {
+            <section
+                class="rails-page__skeleton-rail"
+                aria-hidden="true"
+                aria-busy="true"
+            >
+                <div class="rails-page__skeleton-header"></div>
+                <div class="rails-page__skeleton-track">
+                    @for (slot of skeletonSlots; track slot) {
+                        <div class="rails-page__skeleton-card"></div>
+                    }
+                </div>
+            </section>
+        }
+
+        <!-- Favorites rail -->
+        @if (favoriteCards().length > 0) {
+            <lib-dashboard-rail
+                [label]="'WORKSPACE.DASHBOARD.GLOBAL_FAVORITES' | translate"
+                [items]="favoriteCards()"
+                [totalCount]="data.globalFavoriteItems().length"
+                [seeAllLink]="['/workspace/global-favorites']"
+                [testId]="'dashboard-global-favorites-rail'"
+            />
+        } @else if (data.globalFavoritesLoading()) {
+            <section
+                class="rails-page__skeleton-rail"
+                aria-hidden="true"
+                aria-busy="true"
+            >
+                <div class="rails-page__skeleton-header"></div>
+                <div class="rails-page__skeleton-track">
+                    @for (slot of skeletonSlots; track slot) {
+                        <div class="rails-page__skeleton-card"></div>
+                    }
+                </div>
+            </section>
+        }
+
+        <!-- Sources rail -->
+        @if (sourceCards().length > 0) {
+            <lib-dashboard-rail
+                [label]="'WORKSPACE.DASHBOARD.RECENT_SOURCES' | translate"
+                [items]="sourceCards()"
+                [totalCount]="data.playlists().length"
+                [seeAllLink]="['/workspace/sources']"
+                aspectRatio="16 / 9"
+                [testId]="'dashboard-recent-sources-rail'"
+                (actionSelected)="onSourceActionSelected($event)"
+            />
+        } @else if (!data.playlistsLoaded()) {
+            <section
+                class="rails-page__skeleton-rail"
+                aria-hidden="true"
+                aria-busy="true"
+            >
+                <div class="rails-page__skeleton-header"></div>
+                <div class="rails-page__skeleton-track">
+                    @for (slot of skeletonSlots; track slot) {
+                        <div class="rails-page__skeleton-card"></div>
+                    }
+                </div>
+            </section>
+        }
+
+        <!-- Xtream recently-added rail (only relevant if there are Xtream playlists) -->
+        @if (xtreamRecentlyAddedCards().length > 0) {
+            <lib-dashboard-rail
+                [label]="
+                    'WORKSPACE.DASHBOARD.XTREAM_RECENTLY_ADDED' | translate
+                "
+                [items]="xtreamRecentlyAddedCards()"
+                [totalCount]="data.xtreamRecentlyAddedItems().length"
+                [testId]="'dashboard-xtream-recently-added-rail'"
+            />
+        } @else if (
+            xtreamPlaylistCount() > 0 && data.xtreamRecentlyAddedLoading()
+        ) {
+            <section
+                class="rails-page__skeleton-rail"
+                aria-hidden="true"
+                aria-busy="true"
+            >
+                <div class="rails-page__skeleton-header"></div>
+                <div class="rails-page__skeleton-track">
+                    @for (slot of skeletonSlots; track slot) {
+                        <div class="rails-page__skeleton-card"></div>
+                    }
+                </div>
+            </section>
+        }
+    }
+</section>

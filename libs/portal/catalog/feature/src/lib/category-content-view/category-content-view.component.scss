@@ -1,0 +1,75 @@
+@use '../../../../../../ui/styles/panel-header' as panel;
+
+:host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.category-content-layout {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+// ─── Sticky header bar — styled like a widget header ─────────────────────────
+.category-content-header {
+    @include panel.standard-panel-header($sticky: true);
+}
+
+// ─── Category meta (title + subtitle) ────────────────────────────────────────
+.category-meta {
+    @include panel.standard-panel-meta();
+}
+
+.category-title {
+    @include panel.standard-panel-title();
+}
+
+.category-subtitle {
+    @include panel.standard-panel-subtitle();
+}
+
+// ─── Paginator — flush right, no ghost background ────────────────────────────
+mat-paginator {
+    background: transparent !important;
+    flex-shrink: 0;
+    // Shrink paginator text to fit header height comfortably
+    --mat-paginator-container-size: 40px;
+    --mat-paginator-enabled-icon-color: var(--app-body-color, var(--mat-sys-on-surface-variant));
+    --mat-paginator-disabled-icon-color: rgba(255, 255, 255, 0.18);
+}
+
+// ─── Grid scroll area ─────────────────────────────────────────────────────────
+app-grid-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px 20px 20px;
+    display: block;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+@media (max-width: 768px) {
+    .category-content-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 10px 16px;
+        min-height: unset;
+    }
+
+    .category-meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
+    app-grid-list {
+        padding: 12px 16px 16px;
+    }
+}

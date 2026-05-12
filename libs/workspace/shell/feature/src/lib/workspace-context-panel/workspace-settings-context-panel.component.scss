@@ -1,0 +1,37 @@
+@use '../../nav-list.scss';
+
+:host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.panel-title {
+    margin: 0;
+    padding: 16px 16px 0;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--mat-sys-on-surface);
+}
+
+.settings-panel-body {
+    flex: 1;
+    min-height: 0;
+    padding-top: 16px;
+}
+
+.settings-sections-list {
+    height: 100%;
+}
+
+.settings-panel-footer {
+    flex-shrink: 0;
+    padding: 12px 8px calc(20px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--app-separator);
+}
+
+.settings-section-item:hover:not(.active):not(.selected),
+.settings-back-button:hover:not(.active):not(.selected) {
+    background: var(--app-selection-surface);
+}

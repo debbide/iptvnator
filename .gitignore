@@ -1,0 +1,85 @@
+# See http://help.github.com/ignore-files/ for more about ignoring files. 
+
+#compiled output 
+/dist 
+/build 
+/tmp 
+/out-tsc 
+/app-builds 
+/release 
+/e2e/tracing
+/e2e/screenshots 
+/test-results 
+api.js 
+epg-worker.js 
+main.js 
+menu.js 
+src/**/*.js
+!src/karma.conf.js 
+*.js.map 
+data.db 
+preload.js 
+shared/*.js 
+playwright-report 
+.nx
+server.js 
+.github/skills
+.github/prompts
+.agents/skills
+
+# dependencies 
+node_modules
+package-lock.json
+
+# IDEs and editors 
+/.idea 
+.project
+.classpath 
+.c9/ 
+*.launch 
+.settings/ 
+*.sublime-workspace 
+
+# IDE - VSCode 
+.vscode/*
+.vscode/settings.json 
+!.vscode/tasks.json 
+!.vscode/launch.json
+!.vscode/extensions.json 
+
+# misc 
+/.sass-cache 
+/connect.lock 
+/coverage
+/libpeerconnection.log 
+npm-debug.log 
+testem.log 
+/typings 
+.angular/* 
+
+# e2e
+/e2e/*.js 
+!/e2e/protractor.conf.js 
+/e2e/*.map 
+/e2e/db 
+
+# System Files 
+.DS_Store
+Thumbs.db
+.angular
+.astro
+
+.gemini
+.cursor
+.agent
+.claude
+.codex
+.entire
+.plans
+
+# Native Electron addons
+apps/electron-backend/native/build/
+apps/electron-backend/src/app/options/electron-builder.metadata.generated.json
+vendor/embedded-mpv/darwin-*/include/
+vendor/embedded-mpv/darwin-*/lib/
+vendor/embedded-mpv/darwin-*/runtime-manifest.json

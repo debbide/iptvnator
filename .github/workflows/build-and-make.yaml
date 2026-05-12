@@ -1,0 +1,470 @@
+name: Build and Make Electron App
+
+on:
+    push:
+        branches:
+            - master
+        tags:
+            - 'v*.*.*'
+    pull_request:
+        branches:
+            - master
+    workflow_dispatch:
+
+jobs:
+    build:
+        name: Build on ${{ matrix.os }} ${{ matrix.arch }}
+        runs-on: ${{ matrix.runner }}
+        timeout-minutes: 120
+        strategy:
+            matrix:
+                include:
+                    # macOS builds - separate runners to avoid native module conflicts
+                    - os: macos
+                      runner: macos-15-intel
+                      arch: x64
+                    - os: macos
+                      runner: macos-latest
+                      arch: arm64
+                    # Linux and Windows
+                    - os: linux
+                      runner: ubuntu-22.04
+                      linux_profile: standard
+                    - os: linux
+                      runner: ubuntu-24.04
+                      linux_profile: flatpak
+                    - os: windows
+                      runner: windows-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '22'
+                  cache: 'pnpm'
+
+            - name: Install Linux system dependencies
+              if: matrix.os == 'linux'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install --no-install-recommends -y rpm libarchive-tools flatpak flatpak-builder appstream
+
+                  # Configure Flatpak
+                  # 1. Add the Flathub repository (source of runtimes)
+                  flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+
+                  # 2. Install the standard Freedesktop Platform and SDK (required by electron-builder)
+                  # We install version 24.08 as a safe default, electron-builder might pick what it needs
+                  flatpak install --user -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+
+            - name: Select Linux packaging targets for CI profile
+              if: matrix.os == 'linux'
+              run: |
+                  node -e "
+                    const fs = require('fs');
+                    const path = 'electron-builder.json';
+                    const config = JSON.parse(fs.readFileSync(path, 'utf8'));
+                    const targets = Array.isArray(config.linux?.target) ? config.linux.target : [];
+                    const profile = '${{ matrix.linux_profile }}';
+
+                    if (profile === 'standard') {
+                      config.linux.target = targets.filter((entry) => String(entry.target).toLowerCase() !== 'flatpak');
+                    } else if (profile === 'flatpak') {
+                      config.linux.target = targets.filter((entry) => String(entry.target).toLowerCase() === 'flatpak');
+                    }
+
+                    fs.writeFileSync(path, JSON.stringify(config, null, 4) + '\n');
+                  "
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Build frontend
+              run: pnpm nx build web --skip-nx-cache
+
+            - name: Build embedded MPV runtime (macOS release)
+              # TEMPORARY ARTIFACT TEST: remove `|| github.event_name == 'pull_request' || github.ref == 'refs/heads/master'`
+              # after the macOS Embedded MPV artifacts are built and manually tested.
+              if: matrix.os == 'macos' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'pull_request' || github.ref == 'refs/heads/master')
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  brew install meson ninja pkg-config nasm autoconf automake libtool xz
+
+                  RUNTIME_PREFIX="${RUNNER_TEMP}/embedded-mpv-runtime/${{ matrix.arch }}/prefix"
+                  pnpm embedded-mpv:build-runtime -- "${{ matrix.arch }}" "${RUNTIME_PREFIX}"
+                  pnpm embedded-mpv:stage-runtime -- "${{ matrix.arch }}" "${RUNTIME_PREFIX}"
+
+            - name: Build backend
+              env:
+                  IPTVNATOR_EMBEDDED_MPV_ARCH: ${{ matrix.arch || '' }}
+                  IPTVNATOR_REQUIRE_EMBEDDED_MPV: ${{ matrix.os == 'macos' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'pull_request' || github.ref == 'refs/heads/master') && '1' || '0' }}
+              run: pnpm run build:backend
+
+            - name: Verify embedded MPV build output
+              # TEMPORARY ARTIFACT TEST: remove `|| github.event_name == 'pull_request' || github.ref == 'refs/heads/master'`
+              # after the macOS Embedded MPV artifacts are built and manually tested.
+              if: matrix.os == 'macos' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'pull_request' || github.ref == 'refs/heads/master')
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  echo "::group::Native build output"
+                  find apps/electron-backend/native/build/Release -maxdepth 3 -type f | sort
+                  echo "::endgroup::"
+
+                  echo "::group::Dist native output"
+                  find dist/apps/electron-backend/native -maxdepth 3 -type f | sort
+                  echo "::endgroup::"
+
+                  test -f apps/electron-backend/native/build/Release/embedded_mpv.node
+                  test -f dist/apps/electron-backend/native/embedded_mpv.node
+                  test -f dist/apps/electron-backend/native/embedded-mpv-runtime.json
+                  test -f dist/apps/electron-backend/native/lib/libmpv.2.dylib
+
+            - name: Validate AppStream metadata
+              if: matrix.os == 'linux'
+              run: appstreamcli validate --pedantic --no-net apps/electron-backend/linux/com.fourgray.iptvnator.metainfo.xml
+
+            - name: Build website
+              if: matrix.os == 'linux'
+              run: pnpm nx build website --skip-nx-cache
+
+            - name: Verify AppStream website assets
+              if: matrix.os == 'linux'
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  for screenshot in player playlists epg settings; do
+                      if ! find dist/apps/website -path "*/appstream/${screenshot}.png" -print -quit | grep -q .; then
+                          echo "::error::Missing AppStream website asset for ${screenshot}.png"
+                          exit 1
+                      fi
+                  done
+
+            - name: Override macOS arch in electron-builder.json
+              if: matrix.os == 'macos'
+              run: |
+                  # Replace the mac arch array with just the target architecture
+                  node -e "
+                    const fs = require('fs');
+                    const pkg = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
+                    pkg.mac.target.arch = ['${{ matrix.arch }}'];
+                    fs.writeFileSync('electron-builder.json', JSON.stringify(pkg, null, 4));
+                  "
+
+            - name: Validate macOS signing configuration
+              if: matrix.os == 'macos' && github.event_name != 'pull_request'
+              shell: bash
+              env:
+                  CSC_NAME: ${{ vars.CSC_NAME }}
+                  CSC_LINK: ${{ secrets.CSC_LINK }}
+                  CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+                  APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+                  APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+                  APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+                  APPLE_ID: ${{ secrets.APPLE_ID }}
+                  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+                  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+              run: |
+                  if [ -z "${CSC_NAME}" ]; then
+                      echo "::error::Missing CSC_NAME repository variable for deterministic macOS code signing."
+                      exit 1
+                  fi
+
+                  if [ -z "${CSC_LINK}" ] || [ -z "${CSC_KEY_PASSWORD}" ]; then
+                      echo "::error::Missing CSC_LINK or CSC_KEY_PASSWORD secret for macOS code signing."
+                      exit 1
+                  fi
+
+                  has_api_key_credentials=false
+                  if [ -n "${APPLE_API_KEY_CONTENT}" ] || [ -n "${APPLE_API_KEY_ID}" ] || [ -n "${APPLE_API_ISSUER}" ]; then
+                      if [ -z "${APPLE_API_KEY_CONTENT}" ] || [ -z "${APPLE_API_KEY_ID}" ] || [ -z "${APPLE_API_ISSUER}" ]; then
+                          echo "::error::APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER must all be set for App Store Connect API key notarization."
+                          exit 1
+                      fi
+                      has_api_key_credentials=true
+                  fi
+
+                  has_apple_id_credentials=false
+                  if [ -n "${APPLE_ID}" ] || [ -n "${APPLE_APP_SPECIFIC_PASSWORD}" ] || [ -n "${APPLE_TEAM_ID}" ]; then
+                      if [ -z "${APPLE_ID}" ] || [ -z "${APPLE_APP_SPECIFIC_PASSWORD}" ] || [ -z "${APPLE_TEAM_ID}" ]; then
+                          echo "::error::APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID must all be set for Apple ID notarization."
+                          exit 1
+                      fi
+                      has_apple_id_credentials=true
+                  fi
+
+                  if [ "${has_api_key_credentials}" = false ] && [ "${has_apple_id_credentials}" = false ]; then
+                      echo "::error::Missing notarization credentials. Configure either APPLE_API_KEY + APPLE_API_KEY_ID + APPLE_API_ISSUER, or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID."
+                      exit 1
+                  fi
+
+            - name: Prepare macOS notarization credentials
+              if: matrix.os == 'macos' && github.event_name != 'pull_request'
+              shell: bash
+              env:
+                  APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+                  APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+                  APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+                  APPLE_ID: ${{ secrets.APPLE_ID }}
+                  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+                  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+              run: |
+                  if [ -n "${APPLE_API_KEY_CONTENT}" ]; then
+                      APPLE_API_KEY_PATH="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
+                      printf '%s' "${APPLE_API_KEY_CONTENT}" > "${APPLE_API_KEY_PATH}"
+                      chmod 600 "${APPLE_API_KEY_PATH}"
+                      echo "APPLE_API_KEY=${APPLE_API_KEY_PATH}" >> "${GITHUB_ENV}"
+                      echo "APPLE_API_KEY_ID=${APPLE_API_KEY_ID}" >> "${GITHUB_ENV}"
+                      echo "APPLE_API_ISSUER=${APPLE_API_ISSUER}" >> "${GITHUB_ENV}"
+                      echo "APPLE_ID=" >> "${GITHUB_ENV}"
+                      echo "APPLE_APP_SPECIFIC_PASSWORD=" >> "${GITHUB_ENV}"
+                      echo "APPLE_TEAM_ID=" >> "${GITHUB_ENV}"
+                      exit 0
+                  fi
+
+                  if [ -n "${APPLE_ID}" ]; then
+                      echo "APPLE_API_KEY=" >> "${GITHUB_ENV}"
+                      echo "APPLE_API_KEY_ID=" >> "${GITHUB_ENV}"
+                      echo "APPLE_API_ISSUER=" >> "${GITHUB_ENV}"
+                      echo "APPLE_ID=${APPLE_ID}" >> "${GITHUB_ENV}"
+                      echo "APPLE_APP_SPECIFIC_PASSWORD=${APPLE_APP_SPECIFIC_PASSWORD}" >> "${GITHUB_ENV}"
+                      echo "APPLE_TEAM_ID=${APPLE_TEAM_ID}" >> "${GITHUB_ENV}"
+                  fi
+
+            - name: Make Electron app (macOS)
+              if: matrix.os == 'macos' && github.event_name != 'pull_request'
+              env:
+                  CSC_NAME: ${{ vars.CSC_NAME }}
+                  CSC_LINK: ${{ secrets.CSC_LINK }}
+                  CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+                  DEBUG: electron-builder,electron-notarize*
+                  IPTVNATOR_EMBEDDED_MPV_ARCH: ${{ matrix.arch }}
+                  # TEMPORARY MASTER ARTIFACT TEST: remove `|| github.ref == 'refs/heads/master'`
+                  # after the macOS Embedded MPV artifacts are built and manually tested.
+                  IPTVNATOR_REQUIRE_EMBEDDED_MPV: ${{ (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master') && '1' || '0' }}
+              run: pnpm run make:app
+
+            - name: Verify signed macOS app
+              if: matrix.os == 'macos' && github.event_name != 'pull_request'
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  case "${{ matrix.arch }}" in
+                      x64)
+                          APP_PATH="dist/executables/mac/IPTVnator.app"
+                          ;;
+                      arm64)
+                          APP_PATH="dist/executables/mac-arm64/IPTVnator.app"
+                          ;;
+                      *)
+                          echo "::error::Unsupported macOS arch: ${{ matrix.arch }}"
+                          exit 1
+                          ;;
+                  esac
+
+                  print_debug_attrs() {
+                      echo "::group::Extended attributes"
+                      xattr -lr "${APP_PATH}" | sed -n '1,120p' || true
+                      echo "::endgroup::"
+                  }
+
+                  trap print_debug_attrs ERR
+
+                  if [ ! -d "${APP_PATH}" ]; then
+                      echo "::error::Expected app bundle not found at ${APP_PATH}"
+                      exit 1
+                  fi
+
+                  SIGNATURE_INFO="$(codesign -dv --verbose=4 "${APP_PATH}" 2>&1)"
+                  printf '%s\n' "${SIGNATURE_INFO}"
+
+                  if printf '%s\n' "${SIGNATURE_INFO}" | grep -q 'Signature=adhoc'; then
+                      echo "::error::macOS app is still ad-hoc signed."
+                      exit 1
+                  fi
+
+                  if printf '%s\n' "${SIGNATURE_INFO}" | grep -q 'TeamIdentifier=not set'; then
+                      echo "::error::macOS app is missing a TeamIdentifier."
+                      exit 1
+                  fi
+
+                  codesign --verify --deep --strict --verbose=4 "${APP_PATH}"
+                  spctl -a -vvv --type execute "${APP_PATH}"
+                  xcrun stapler validate "${APP_PATH}"
+
+            - name: Make Electron app
+              if: matrix.os != 'macos' || github.event_name == 'pull_request'
+              env:
+                  IPTVNATOR_EMBEDDED_MPV_ARCH: ${{ matrix.arch || '' }}
+                  # TEMPORARY PR TEST: change this back to '0' after manually
+                  # testing the macOS PR artifact with Embedded MPV included.
+                  IPTVNATOR_REQUIRE_EMBEDDED_MPV: ${{ matrix.os == 'macos' && github.event_name == 'pull_request' && '1' || '0' }}
+              run: pnpm run make:app
+
+            - name: Verify packaged worker layout
+              shell: bash
+              env:
+                  PACKAGE_OS: ${{ matrix.os }}
+                  PACKAGE_ARCH: ${{ matrix.arch || '' }}
+                  # TEMPORARY ARTIFACT TEST: remove `|| github.event_name == 'pull_request' || github.ref == 'refs/heads/master'`
+                  # after the macOS Embedded MPV artifacts are built and manually tested.
+                  IPTVNATOR_REQUIRE_EMBEDDED_MPV: ${{ matrix.os == 'macos' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'pull_request' || github.ref == 'refs/heads/master') && '1' || '0' }}
+              run: pnpm run verify:package-layout -- "$PACKAGE_OS" "$PACKAGE_ARCH"
+
+            - name: Smoke test packaged Flatpak launcher
+              if: matrix.os == 'linux' && matrix.linux_profile == 'flatpak'
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  FLATPAK_BUNDLE="$(find dist/executables -maxdepth 1 -name '*.flatpak' | head -n 1)"
+                  if [ -z "${FLATPAK_BUNDLE}" ]; then
+                      echo "::error::Flatpak bundle not found in dist/executables"
+                      exit 1
+                  fi
+
+                  flatpak install --user --noninteractive -y "${FLATPAK_BUNDLE}"
+                  flatpak run --command=sh com.fourgray.iptvnator -c '
+                      set -euo pipefail
+
+                      test -f /app/share/metainfo/com.fourgray.iptvnator.metainfo.xml
+                      test -L /app/bin/iptvnator
+
+                      LAUNCHER_PATH="$(readlink -f /app/bin/iptvnator)"
+                      test -f "${LAUNCHER_PATH}"
+                      test -f "${LAUNCHER_PATH}.bin"
+                      grep -q '\''readlink -f "$SCRIPT_PATH"'\'' "${LAUNCHER_PATH}"
+                      grep -q '\''exec "$SCRIPT_DIR/iptvnator.bin"'\'' "${LAUNCHER_PATH}"
+                  '
+
+            - name: Upload artifacts (macOS)
+              if: matrix.os == 'macos'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: macos-${{ matrix.arch }}-artifacts
+                  path: |
+                      dist/executables/**/*.dmg
+                      dist/executables/**/*.zip
+                  retention-days: 7
+
+            - name: Upload artifacts (Linux)
+              if: matrix.os == 'linux' && matrix.linux_profile == 'standard'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: linux-artifacts
+                  path: |
+                      dist/executables/**/*.deb
+                      dist/executables/**/*.rpm
+                      dist/executables/**/*.snap
+                      dist/executables/**/*.AppImage
+                      dist/executables/**/*.tar.gz
+                      dist/executables/**/*.pacman
+                  retention-days: 7
+
+            - name: Upload artifacts (Flatpak)
+              if: matrix.os == 'linux' && matrix.linux_profile == 'flatpak'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: linux-flatpak-artifacts
+                  path: |
+                      dist/executables/**/*.flatpak
+                  retention-days: 7
+
+            - name: Upload artifacts (Windows)
+              if: matrix.os == 'windows'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: windows-artifacts
+                  path: |
+                      dist/executables/**/*.exe
+                      dist/executables/**/*.msi
+                      dist/executables/**/*.zip
+                  retention-days: 7
+
+    create-release:
+        name: Create Draft Release
+        needs: build
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Download all artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: artifacts
+
+            - name: Display structure of downloaded files
+              run: ls -R artifacts
+
+            - name: Get version from package.json
+              id: package-version
+              run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+            - name: Create Draft Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  draft: true
+                  prerelease: ${{ github.event_name == 'pull_request' }}
+                  name: Release v${{ steps.package-version.outputs.version }}
+                  tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('test-{0}', github.sha) }}
+                  generate_release_notes: true
+                  files: |
+                      artifacts/macos-x64-artifacts/*-x64.dmg
+                      artifacts/macos-x64-artifacts/*-x64.zip
+                      artifacts/macos-arm64-artifacts/*-arm64.dmg
+                      artifacts/macos-arm64-artifacts/*-arm64.zip
+                      artifacts/linux-artifacts/*.AppImage
+                      artifacts/linux-artifacts/*.deb
+                      artifacts/linux-artifacts/*.rpm
+                      artifacts/linux-artifacts/*.snap
+                      artifacts/linux-artifacts/*.tar.gz
+                      artifacts/linux-artifacts/*.pacman
+                      artifacts/linux-flatpak-artifacts/*.flatpak
+                      artifacts/windows-artifacts/*-setup.exe
+                      artifacts/windows-artifacts/*.msi
+                      artifacts/windows-artifacts/*.zip
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    publish-snap:
+        name: Publish to Snapcraft Store
+        needs: build
+        runs-on: ubuntu-latest
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+            SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.snapcraft_token }}
+
+        steps:
+            - name: Download snap artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: linux-artifacts
+                  path: artifacts
+
+            - name: Setup Snapcraft
+              uses: samuelmeuli/action-snapcraft@v3
+
+            - name: Publish all snaps to edge channel
+              run: |
+                  # Find and publish all snap files
+                  for SNAP_FILE in artifacts/*.snap; do
+                      if [ -f "$SNAP_FILE" ]; then
+                          echo "Publishing: $SNAP_FILE"
+                          snapcraft upload --release=edge "$SNAP_FILE"
+                      fi
+                  done

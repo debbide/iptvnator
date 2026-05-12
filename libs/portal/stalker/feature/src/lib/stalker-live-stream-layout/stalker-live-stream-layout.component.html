@@ -1,0 +1,201 @@
+@let isEmbeddedPlayer = usesEmbeddedPlayer();
+
+@if (stalkerStore.selectedCategoryId()) {
+    <div
+        class="sidebar"
+        [class.sidebar-collapsed]="isSidebarCollapsed()"
+        appResizable
+        [minWidth]="250"
+        [maxWidth]="600"
+        [defaultWidth]="400"
+        storageKey="sidebar-width"
+    >
+        <div class="sidebar-header category-content-header">
+            <div class="category-meta">
+                <h2 class="category-title">
+                    {{ selectedCategoryTitle() }}
+                </h2>
+                @if (visibleChannels().length > 0) {
+                    <span class="category-subtitle"
+                        >{{ visibleChannels().length }}
+                        {{
+                            visibleChannels().length === 1 ? 'item' : 'items'
+                        }}</span
+                    >
+                }
+            </div>
+            <button
+                mat-icon-button
+                type="button"
+                [attr.aria-label]="'LAYOUT.HIDE_CHANNELS_LIST' | translate"
+                [matTooltip]="'LAYOUT.TOGGLE_SIDEBAR_TOOLTIP' | translate"
+                [attr.aria-pressed]="isSidebarCollapsed()"
+                (click)="toggleSidebar()"
+            >
+                <mat-icon>chevron_left</mat-icon>
+            </button>
+        </div>
+
+        <div #scrollContainer class="channels-list">
+            @if (isInitialChannelsLoading()) {
+                <app-channel-list-skeleton
+                    [count]="9"
+                    [showEpg]="false"
+                    [actionCount]="1"
+                />
+            } @else if (searchTerm() && visibleChannels().length === 0) {
+                <div class="empty-search-state">
+                    <app-portal-empty-state
+                        icon="search_off"
+                        [message]="'CHANNELS.NO_SEARCH_RESULTS' | translate"
+                    />
+                </div>
+            } @else {
+                @for (item of visibleChannels(); track item.id ?? $index) {
+                    <app-channel-list-item
+                        [name]="item.o_name || item.name || ''"
+                        [logo]="item.logo"
+                        [selected]="isSelectedChannel(item)"
+                        [epgProgram]="
+                            epgPreviewPrograms.get(
+                                normalizeStalkerEntityId(item.id)
+                            ) ?? null
+                        "
+                        [progressPercentage]="
+                            currentProgramsProgress.get(
+                                normalizeStalkerEntityId(item.id)
+                            ) ?? 0
+                        "
+                        [showFavoriteButton]="true"
+                        [showProgramInfoButton]="false"
+                        [isFavorite]="
+                            favorites.get(normalizeStalkerEntityId(item.id)) ??
+                            false
+                        "
+                        (clicked)="playChannel(item)"
+                        (activated)="playChannel(item, true)"
+                        (favoriteToggled)="toggleFavorite(item)"
+                    />
+                }
+            }
+
+            @if (isLoadingMore()) {
+                <div class="loading-indicator">
+                    <mat-spinner diameter="24" />
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<div class="content-container">
+    @if (isSidebarCollapsed()) {
+        <button
+            mat-icon-button
+            type="button"
+            class="sidebar-restore"
+            [attr.aria-label]="'LAYOUT.SHOW_CHANNELS_LIST' | translate"
+            [matTooltip]="'LAYOUT.TOGGLE_SIDEBAR_TOOLTIP' | translate"
+            [attr.aria-pressed]="isSidebarCollapsed()"
+            (click)="toggleSidebar()"
+        >
+            <mat-icon>chevron_right</mat-icon>
+        </button>
+    }
+    @if (!stalkerStore.selectedCategoryId()) {
+        <app-portal-empty-state
+            icon="live_tv"
+            [message]="'PORTALS.SELECT_CATEGORY' | translate"
+        />
+    } @else if (stalkerStore.selectedItem()) {
+        @if (streamUrl() && (isEmbeddedPlayer || isRadioMode())) {
+            <div class="video-player">
+                @if (isRadioMode()) {
+                    <app-audio-player
+                        [url]="streamUrl()"
+                        [icon]="activePlaybackArtwork()"
+                        [channelName]="activePlaybackTitle()"
+                        [dispatchAdjacentChannelAction]="false"
+                        (channelSwitchRequested)="
+                            handleRadioChannelSwitch($event)
+                        "
+                    />
+                } @else {
+                    <app-web-player-view
+                        [streamUrl]="streamUrl()"
+                        [title]="activePlayback()?.title ?? ''"
+                        [playback]="activePlayback()"
+                        (externalFallbackRequested)="
+                            handleExternalFallbackRequest($event)
+                        "
+                    />
+                }
+            </div>
+        }
+        @if (!isRadioMode()) {
+            @let canCollapseEpgPanel = !!streamUrl() && isEmbeddedPlayer;
+            <div
+                class="epg"
+                [class.epg-collapsed]="
+                    canCollapseEpgPanel && isLiveEpgPanelCollapsed()
+                "
+            >
+                @if (canCollapseEpgPanel) {
+                    <app-live-epg-panel
+                        [collapsed]="isLiveEpgPanelCollapsed()"
+                        [summary]="liveEpgPanelSummary()"
+                        [loading]="isLoadingEpg()"
+                        [showDateNavigator]="true"
+                        [selectedDate]="selectedLiveEpgDate()"
+                        (collapsedChange)="
+                            onLiveEpgPanelCollapsedChange($event)
+                        "
+                        (dateNavigation)="onLiveEpgDateNavigation($event)"
+                    >
+                        <ng-container
+                            *ngTemplateOutlet="
+                                epgPanelContent;
+                                context: { unifiedDateNavigator: true }
+                            "
+                        />
+                    </app-live-epg-panel>
+                } @else {
+                    <ng-container
+                        *ngTemplateOutlet="
+                            epgPanelContent;
+                            context: { unifiedDateNavigator: false }
+                        "
+                    />
+                }
+            </div>
+        }
+    } @else {
+        <app-portal-empty-state
+            icon="live_tv"
+            [message]="'CHANNELS.SELECT_CHANNEL_PLAYBACK' | translate"
+        />
+    }
+</div>
+
+<ng-template #epgPanelContent let-unifiedDateNavigator="unifiedDateNavigator">
+    <div class="epg-content">
+        @if (isLoadingEpg()) {
+            <div class="loading-indicator">
+                <mat-spinner diameter="24" />
+            </div>
+        } @else {
+            <app-epg-list
+                [controlledChannel]="controlledChannel()"
+                [controlledPrograms]="activeEpgPrograms()"
+                [controlledArchiveDays]="0"
+                [selectedDate]="
+                    unifiedDateNavigator ? selectedLiveEpgDate() : null
+                "
+                [showDateNavigator]="!unifiedDateNavigator"
+                (selectedDateChange)="
+                    unifiedDateNavigator && onLiveEpgSelectedDateChange($event)
+                "
+            />
+        }
+    </div>
+</ng-template>

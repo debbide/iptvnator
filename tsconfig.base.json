@@ -1,0 +1,94 @@
+{
+    "compileOnSave": false,
+    "compilerOptions": {
+        "rootDir": ".",
+        "sourceMap": true,
+        "declaration": false,
+        "moduleResolution": "node",
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "importHelpers": true,
+        "target": "es2015",
+        "module": "esnext",
+        "lib": ["es2020", "dom"],
+        "skipLibCheck": true,
+        "skipDefaultLibCheck": true,
+        "baseUrl": ".",
+        "paths": {
+            "@iptvnator/portal/catalog/feature": [
+                "libs/portal/catalog/feature/src/index.ts"
+            ],
+            "@iptvnator/portal/downloads/feature": [
+                "libs/portal/downloads/feature/src/index.ts"
+            ],
+            "@iptvnator/portal/shared/ui": [
+                "libs/portal/shared/ui/src/index.ts"
+            ],
+            "@iptvnator/portal/shared/util": [
+                "libs/portal/shared/util/src/index.ts"
+            ],
+            "@iptvnator/epg/data-access": ["libs/epg/data-access/src/index.ts"],
+            "@iptvnator/playlist/shared/ui": [
+                "libs/playlist/shared/ui/src/index.ts"
+            ],
+            "@iptvnator/playlist/shared/util": [
+                "libs/playlist/shared/util/src/index.ts"
+            ],
+            "@iptvnator/ui/epg": ["libs/ui/epg/src/index.ts"],
+            "@iptvnator/ui/epg/date": ["libs/ui/epg/src/lib/epg-date.ts"],
+            "@iptvnator/ui/epg/progress-panel": [
+                "libs/ui/epg/src/lib/epg-progress-panel/epg-progress-panel.component.ts"
+            ],
+            "@iptvnator/ui/playback/external-player-info-dialog": [
+                "libs/ui/playback/src/lib/external-player-info-dialog/external-player-info-dialog.component.ts"
+            ],
+            "@iptvnator/ui/playback": ["libs/ui/playback/src/index.ts"],
+            "@iptvnator/playlist/import/feature": [
+                "libs/playlist/import/feature/src/index.ts"
+            ],
+            "@iptvnator/playlist/m3u/feature-player": [
+                "libs/playlist/m3u/feature-player/src/index.ts"
+            ],
+            "@iptvnator/portal/stalker/feature": [
+                "libs/portal/stalker/feature/src/index.ts"
+            ],
+            "@iptvnator/portal/stalker/data-access": [
+                "libs/portal/stalker/data-access/src/index.ts"
+            ],
+            "@iptvnator/portal/xtream/feature": [
+                "libs/portal/xtream/feature/src/index.ts"
+            ],
+            "@iptvnator/portal/xtream/data-access": [
+                "libs/portal/xtream/data-access/src/index.ts"
+            ],
+            "@iptvnator/workspace/shell/feature": [
+                "libs/workspace/shell/feature/src/index.ts"
+            ],
+            "@iptvnator/workspace/shell/util": [
+                "libs/workspace/shell/util/src/index.ts"
+            ],
+            "@iptvnator/pipes": ["libs/ui/pipes/src/index.ts"],
+            "@package": ["./package.json"],
+            "components": ["libs/ui/components/src/index.ts"],
+            "m3u-state": ["libs/m3u-state/src/index.ts"],
+            "m3u-utils": ["libs/shared/m3u-utils/src/index.ts"],
+            "services": ["libs/services/src/index.ts"],
+            "shared-interfaces": ["libs/shared/interfaces/src/index.ts"],
+            "shared-portals": ["libs/ui/shared-portals/src/index.ts"],
+            "remote-control": ["libs/ui/remote-control/src/index.ts"],
+            "database": ["libs/shared/database/src/index.ts"],
+            "database-schema": ["libs/shared/database/src/lib/schema.ts"],
+            "database-path-utils": [
+                "libs/shared/database/src/lib/path-utils.ts"
+            ],
+            "workspace-dashboard-feature": [
+                "libs/workspace/dashboard/feature/src/index.ts"
+            ],
+            "workspace-dashboard-data-access": [
+                "libs/workspace/dashboard/data-access/src/index.ts"
+            ]
+        }
+    },
+    "exclude": ["node_modules", "tmp"],
+    "files": ["global.d.ts"]
+}

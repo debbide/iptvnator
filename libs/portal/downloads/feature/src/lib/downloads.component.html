@@ -1,0 +1,409 @@
+<div class="downloads-layout">
+    <div class="downloads">
+        <header class="downloads__header">
+            <div class="downloads__header-left">
+                <div class="settings-group__header-text">
+                    <h1>{{ 'DOWNLOADS.TITLE' | translate }}</h1>
+                    @if (activeCount() > 0) {
+                        <span class="downloads__badge">{{
+                            activeCount()
+                        }}</span>
+                    }
+                </div>
+            </div>
+            <div class="downloads__header-actions">
+                @if (isAvailable()) {
+                    <div
+                        class="downloads__folder-inline"
+                        [attr.title]="
+                            downloadFolder() ||
+                            ('DOWNLOADS.NO_FOLDER' | translate)
+                        "
+                    >
+                        <mat-icon>folder_open</mat-icon>
+                        <span class="downloads__folder-inline-path">
+                            {{
+                                downloadFolder() ||
+                                    ('DOWNLOADS.NO_FOLDER' | translate)
+                            }}
+                        </span>
+                    </div>
+                    <button mat-stroked-button (click)="changeFolder()">
+                        {{ 'DOWNLOADS.CHANGE_FOLDER' | translate }}
+                    </button>
+                    @if (hasClearableDownloads()) {
+                        <button
+                            mat-stroked-button
+                            (click)="clearCompleted()"
+                            [matTooltip]="'DOWNLOADS.CLEAR_COMPLETED' | translate"
+                            [attr.aria-label]="
+                                'DOWNLOADS.CLEAR_COMPLETED' | translate
+                            "
+                        >
+                            <mat-icon>delete_sweep</mat-icon>
+                            {{ 'DOWNLOADS.CLEAR_COMPLETED' | translate }}
+                        </button>
+                    }
+                }
+            </div>
+        </header>
+
+        @if (!isAvailable()) {
+            <div class="downloads__empty">
+                <mat-icon>desktop_access_disabled</mat-icon>
+                <p>{{ 'DOWNLOADS.NOT_AVAILABLE' | translate }}</p>
+                <span>{{ 'DOWNLOADS.DESKTOP_ONLY' | translate }}</span>
+            </div>
+        } @else if (!playlistsLoaded()) {
+            <div
+                class="downloads__list-wrapper downloads__list-wrapper--loading"
+                aria-live="polite"
+                aria-busy="true"
+            >
+                <p class="downloads__loading-label">
+                    {{ 'CHANNELS.LOADING' | translate }}
+                </p>
+                <div
+                    class="downloads__list downloads__list--skeleton"
+                    aria-hidden="true"
+                >
+                    @for (slot of skeletonItems; track slot) {
+                        <div class="downloads__skeleton-item">
+                            <div class="downloads__skeleton-poster"></div>
+                            <div class="downloads__skeleton-info">
+                                <div class="downloads__skeleton-title"></div>
+                                <div
+                                    class="downloads__skeleton-title downloads__skeleton-title--short"
+                                ></div>
+                                <div class="downloads__skeleton-meta">
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                                <div class="downloads__skeleton-progress"></div>
+                                <div class="downloads__skeleton-actions">
+                                    @for (
+                                        actionSlot of skeletonActionSlots;
+                                        track actionSlot
+                                    ) {
+                                        <span></span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        } @else if (hasNoPlaylists()) {
+            <app-empty-state
+                type="no-data"
+                icon="download_for_offline"
+                titleKey="DOWNLOADS.NO_PLAYLISTS_TITLE"
+                descriptionKey="DOWNLOADS.NO_PLAYLISTS_BODY"
+                primaryActionLabelKey="HOME.PLAYLISTS.ADD_YOUR_FIRST"
+                secondaryActionLabelKey="WORKSPACE.SHELL.GO_TO_SOURCES"
+                (primaryActionClicked)="addPlaylist()"
+                (secondaryActionClicked)="goToSources()"
+            />
+        } @else if (showDownloadSkeleton()) {
+            <div
+                class="downloads__list-wrapper downloads__list-wrapper--loading"
+                aria-live="polite"
+                aria-busy="true"
+            >
+                <p class="downloads__loading-label">
+                    {{ 'CHANNELS.LOADING' | translate }}
+                </p>
+                <div
+                    class="downloads__list downloads__list--skeleton"
+                    aria-hidden="true"
+                >
+                    @for (slot of skeletonItems; track slot) {
+                        <div class="downloads__skeleton-item">
+                            <div class="downloads__skeleton-poster"></div>
+                            <div class="downloads__skeleton-info">
+                                <div class="downloads__skeleton-title"></div>
+                                <div
+                                    class="downloads__skeleton-title downloads__skeleton-title--short"
+                                ></div>
+                                <div class="downloads__skeleton-meta">
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                                <div class="downloads__skeleton-progress"></div>
+                                <div class="downloads__skeleton-actions">
+                                    @for (
+                                        actionSlot of skeletonActionSlots;
+                                        track actionSlot
+                                    ) {
+                                        <span></span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        } @else if (!hasScopedDownloads()) {
+            <app-empty-state
+                type="no-data"
+                icon="download_for_offline"
+                titleKey="DOWNLOADS.EMPTY"
+                descriptionKey="DOWNLOADS.NO_ITEMS_BODY"
+                secondaryActionLabelKey="WORKSPACE.SHELL.GO_TO_DASHBOARD"
+                (secondaryActionClicked)="goToDashboard()"
+            />
+        } @else if (filteredDownloads().length === 0) {
+            <div class="downloads__empty">
+                <mat-icon>search_off</mat-icon>
+                <p>{{ 'DOWNLOADS.NO_FILTER_MATCH' | translate }}</p>
+                <span>{{ 'DOWNLOADS.NO_FILTER_MATCH_HINT' | translate }}</span>
+            </div>
+        } @else {
+            <div class="downloads__list-wrapper">
+                <div class="downloads__list">
+                    @for (item of filteredDownloads(); track item.id) {
+                        <div
+                            class="downloads__item"
+                            [class]="getStatusColor(item.status)"
+                            [class.downloads__item--clickable]="
+                                isItemNavigable(item)
+                            "
+                            [class.downloads__item--unavailable]="
+                                !hasSourcePlaylist(item)
+                            "
+                            [attr.role]="
+                                isItemNavigable(item) ? 'button' : null
+                            "
+                            [attr.tabindex]="isItemNavigable(item) ? 0 : null"
+                            [matTooltip]="
+                                !hasSourcePlaylist(item)
+                                    ? ('DOWNLOADS.SOURCE_PLAYLIST_MISSING'
+                                      | translate)
+                                    : null
+                            "
+                            (click)="openInLibrary(item)"
+                            (keydown)="onItemCardKeydown($event, item)"
+                        >
+                            <div class="downloads__item-poster">
+                                @if (hasPoster(item)) {
+                                    <img
+                                        [src]="item.posterUrl"
+                                        [alt]="item.title"
+                                        loading="lazy"
+                                        (error)="markPosterFailed(item)"
+                                    />
+                                } @else {
+                                    <mat-icon>{{
+                                        getPosterPlaceholderIcon(item)
+                                    }}</mat-icon>
+                                }
+                            </div>
+
+                            <div class="downloads__item-info">
+                                <div class="downloads__item-title">
+                                    <span class="downloads__item-title-text">
+                                        {{ item.title }}
+                                    </span>
+                                    @if (item.contentType === 'episode') {
+                                        <span class="downloads__episode-badge">
+                                            {{ formatEpisodeLabel(item) }}
+                                        </span>
+                                    }
+                                </div>
+
+                                <div class="downloads__item-meta">
+                                    <span
+                                        class="downloads__item-status"
+                                        [class]="getStatusColor(item.status)"
+                                    >
+                                        <mat-icon>{{
+                                            getStatusIcon(item.status)
+                                        }}</mat-icon>
+                                        {{
+                                            'DOWNLOADS.STATUS.' +
+                                                item.status.toUpperCase()
+                                                | translate
+                                        }}
+                                    </span>
+
+                                    @if (
+                                        item.status === 'downloading' ||
+                                        item.status === 'completed'
+                                    ) {
+                                        <span class="downloads__item-size">
+                                            {{
+                                                formatBytes(
+                                                    item.bytesDownloaded
+                                                )
+                                            }}
+                                            @if (item.totalBytes) {
+                                                /
+                                                {{
+                                                    formatBytes(item.totalBytes)
+                                                }}
+                                            }
+                                        </span>
+                                    }
+
+                                    @if (item.errorMessage) {
+                                        <span class="downloads__item-error">
+                                            {{ item.errorMessage }}
+                                        </span>
+                                    }
+                                </div>
+
+                                @if (item.status === 'downloading') {
+                                    <mat-progress-bar
+                                        mode="determinate"
+                                        [value]="getProgress(item)"
+                                    ></mat-progress-bar>
+                                }
+
+                                <div class="downloads__item-actions">
+                                    <button
+                                        mat-icon-button
+                                        (click)="
+                                            $event.stopPropagation();
+                                            copyUrl(item)
+                                        "
+                                        [matTooltip]="
+                                            'DOWNLOADS.COPY_URL' | translate
+                                        "
+                                    >
+                                        <mat-icon>content_copy</mat-icon>
+                                    </button>
+                                    @switch (item.status) {
+                                        @case ('queued') {
+                                            <button
+                                                mat-icon-button
+                                                (click)="
+                                                    $event.stopPropagation();
+                                                    cancel(item)
+                                                "
+                                                [matTooltip]="
+                                                    'DOWNLOADS.CANCEL' | translate
+                                                "
+                                            >
+                                                <mat-icon>close</mat-icon>
+                                            </button>
+                                        }
+                                        @case ('downloading') {
+                                            <button
+                                                mat-icon-button
+                                                (click)="
+                                                    $event.stopPropagation();
+                                                    cancel(item)
+                                                "
+                                                [matTooltip]="
+                                                    'DOWNLOADS.CANCEL' | translate
+                                                "
+                                            >
+                                                <mat-icon>close</mat-icon>
+                                            </button>
+                                        }
+                                        @case ('completed') {
+                                            <button
+                                                mat-icon-button
+                                                color="primary"
+                                                (click)="
+                                                    $event.stopPropagation();
+                                                    play(item)
+                                                "
+                                                [matTooltip]="
+                                                    'DOWNLOADS.PLAY' | translate
+                                                "
+                                            >
+                                                <mat-icon>play_arrow</mat-icon>
+                                            </button>
+                                            <button
+                                                mat-icon-button
+                                                (click)="
+                                                    $event.stopPropagation();
+                                                    reveal(item)
+                                                "
+                                                [matTooltip]="
+                                                    'DOWNLOADS.REVEAL' | translate
+                                                "
+                                            >
+                                                <mat-icon>folder_open</mat-icon>
+                                            </button>
+                                            <button
+                                                mat-icon-button
+                                                color="warn"
+                                                (click)="
+                                                    $event.stopPropagation();
+                                                    remove(item)
+                                                "
+                                                [matTooltip]="
+                                                    'DOWNLOADS.REMOVE' | translate
+                                                "
+                                            >
+                                                <mat-icon>delete</mat-icon>
+                                            </button>
+                                        }
+                                        @case ('failed') {
+                                            <button
+                                                mat-icon-button
+                                                color="accent"
+                                                (click)="
+                                                    $event.stopPropagation();
+                                                    retry(item)
+                                                "
+                                                [matTooltip]="
+                                                    'DOWNLOADS.RETRY' | translate
+                                                "
+                                            >
+                                                <mat-icon>refresh</mat-icon>
+                                            </button>
+                                            <button
+                                                mat-icon-button
+                                                color="warn"
+                                                (click)="
+                                                    $event.stopPropagation();
+                                                    remove(item)
+                                                "
+                                                [matTooltip]="
+                                                    'DOWNLOADS.REMOVE' | translate
+                                                "
+                                            >
+                                                <mat-icon>delete</mat-icon>
+                                            </button>
+                                        }
+                                        @case ('canceled') {
+                                            <button
+                                                mat-icon-button
+                                                color="accent"
+                                                (click)="
+                                                    $event.stopPropagation();
+                                                    retry(item)
+                                                "
+                                                [matTooltip]="
+                                                    'DOWNLOADS.RETRY' | translate
+                                                "
+                                            >
+                                                <mat-icon>refresh</mat-icon>
+                                            </button>
+                                            <button
+                                                mat-icon-button
+                                                color="warn"
+                                                (click)="
+                                                    $event.stopPropagation();
+                                                    remove(item)
+                                                "
+                                                [matTooltip]="
+                                                    'DOWNLOADS.REMOVE' | translate
+                                                "
+                                            >
+                                                <mat-icon>delete</mat-icon>
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>

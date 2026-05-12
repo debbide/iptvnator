@@ -242,6 +242,50 @@ describe('playlist utils', () => {
         );
     });
 
+    it('merges CCTV channel aliases across MCP line groups', () => {
+        const playlist = createPlaylistObject('CCTV alternate stream groups', {
+            header: { attrs: {}, raw: '#EXTM3U' },
+            items: [
+                createParsedItem({
+                    name: 'CCTV3综艺',
+                    groupTitle: '央视',
+                    tvgName: 'CCTV3综艺',
+                    tvgId: '',
+                    url: 'https://mgtv.example.com/cctv3.m3u8',
+                }),
+                createParsedItem({
+                    name: 'Sports',
+                    groupTitle: '央视',
+                    tvgName: 'Sports',
+                    tvgId: '',
+                    url: 'https://example.com/sports.m3u8',
+                }),
+                createParsedItem({
+                    name: 'cctv3-MCP',
+                    groupTitle: '央视-MCP',
+                    tvgName: 'cctv3',
+                    tvgId: '',
+                    url: 'https://live.example.com/mcp/cctv3.m3u8',
+                }),
+            ],
+        });
+
+        expect(playlist.count).toBe(2);
+        expect(playlist.playlist.items[0]).toEqual(
+            expect.objectContaining({
+                name: 'CCTV3综艺',
+                alternateStreams: [
+                    expect.objectContaining({
+                        url: 'https://mgtv.example.com/cctv3.m3u8',
+                    }),
+                    expect.objectContaining({
+                        url: 'https://live.example.com/mcp/cctv3.m3u8',
+                    }),
+                ],
+            })
+        );
+    });
+
     it('keeps same-name channels in unrelated groups separate', () => {
         const playlist = createPlaylistObject('Unrelated group names', {
             header: { attrs: {}, raw: '#EXTM3U' },

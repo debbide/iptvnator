@@ -166,6 +166,31 @@ function getParsedItemAttribute(
     return getRawAttribute(raw, key);
 }
 
+function getLineLabel(item: ParsedPlaylistItem): string | undefined {
+    const explicitLabel = LINE_LABEL_KEYS.map((key) =>
+        getParsedItemAttribute(item, key)
+    ).find((value) => Boolean(value?.trim()));
+
+    return explicitLabel?.trim() ?? getImplicitLineLabel(item);
+}
+
+function getImplicitLineLabel(item: ParsedPlaylistItem): string | undefined {
+    const groupSuffix = getLineSuffix(item.group?.title);
+    if (groupSuffix) {
+        return groupSuffix;
+    }
+
+    return getLineSuffix(item.tvg?.name) ?? getLineSuffix(item.name);
+}
+
+function getLineSuffix(value: string | undefined): string | undefined {
+    const match = value
+        ?.trim()
+        .match(/[-_（(](mcp|line\s*\d+|线路\s*\d+)[）)]?$/i);
+
+    return match?.[1]?.replace(/\s+/g, '').toUpperCase();
+}
+
 function getChannelMergeIdentity(item: ParsedPlaylistItem): string {
     const tvgId = item.tvg?.id?.trim();
     if (tvgId) {
@@ -188,6 +213,52 @@ function getChannelNameIdentity(item: ParsedPlaylistItem): string {
     return (item.tvg?.name?.trim() || item.name?.trim() || '').toLowerCase();
 }
 
+function getChannelLineageIdentity(item: ParsedPlaylistItem): string {
+    const name = getChannelNameIdentity(item);
+    if (!name) {
+        return '';
+    }
+
+    return getCctvChannelIdentity(name) ?? normalizeLineageName(name);
+}
+
+function getCctvChannelIdentity(name: string): string | null {
+    const normalizedName = normalizeLineageName(name)
+        .replace(/^央视/, 'cctv')
+        .replace(/^中央电视台/, 'cctv');
+    const match = normalizedName.match(/^cctv0*(\d+)(\+|p|plus)?/);
+
+    if (!match) {
+        return null;
+    }
+
+    const channelNumber = match[1];
+    const plusSuffix = match[2] ? 'plus' : '';
+
+    if (channelNumber === '4') {
+        if (normalizedName.includes('欧洲') || normalizedName.includes('europe')) {
+            return 'cctv4-europe';
+        }
+
+        if (
+            normalizedName.includes('美洲') ||
+            normalizedName.includes('america')
+        ) {
+            return 'cctv4-america';
+        }
+    }
+
+    return `cctv${channelNumber}${plusSuffix}`;
+}
+
+function normalizeLineageName(name: string): string {
+    return name
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[-_（(](?:mcp|line\d*|线路\d*)[）)]?$/i, '');
+}
+
 function getGroupFamily(title: string | undefined): string {
     return (title ?? '')
         .trim()
@@ -204,10 +275,10 @@ function canMergeAsAlternateGroup(
         return false;
     }
 
-    const nameIdentity = getChannelNameIdentity(item);
+    const nameIdentity = getChannelLineageIdentity(item);
     if (
         !nameIdentity ||
-        nameIdentity !== getChannelNameIdentity(existingChannel)
+        nameIdentity !== getChannelLineageIdentity(existingChannel)
     ) {
         return false;
     }
@@ -238,17 +309,15 @@ function toAlternateStreams(
     const urls = Array.from(new Set([item.url, ...getRawStreamUrls(item)]))
         .map((url) => url?.trim())
         .filter(Boolean);
-    const explicitLabel = LINE_LABEL_KEYS.map((key) =>
-        getParsedItemAttribute(item, key)
-    ).find((value) => Boolean(value?.trim()));
+    const lineLabel = getLineLabel(item);
 
     return urls.map((url, index) => {
         const labelIndex = startIndex + index;
         const label =
-            explicitLabel && urls.length === 1
-                ? explicitLabel.trim()
-                : explicitLabel
-                  ? `${explicitLabel.trim()} ${index + 1}`
+            lineLabel && urls.length === 1
+                ? lineLabel
+                : lineLabel
+                  ? `${lineLabel} ${index + 1}`
                   : `Line ${labelIndex}`;
 
         return {
@@ -341,7 +410,7 @@ function normalizePlaylistItems(items: ParsedPlaylistItem[]): Channel[] {
 function getChannelNameAndGroupFamilyKey(
     item: ParsedPlaylistItem
 ): string | null {
-    const name = getChannelNameIdentity(item);
+    const name = getChannelLineageIdentity(item);
     const groupFamily = getGroupFamily(item.group?.title);
 
     return name && groupFamily ? `${groupFamily}:${name}` : null;

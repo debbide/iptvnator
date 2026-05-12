@@ -901,6 +901,25 @@ export class VideoPlayerComponent implements OnInit, OnDestroy {
         );
     }
 
+    private openWithConfiguredExternalPlayer(
+        playbackUrl: string,
+        channel: Channel | undefined | null
+    ): void {
+        const payload = buildExternalPlayerPayload(channel, playbackUrl);
+        if (!payload) {
+            return;
+        }
+
+        if (this.playerSettings.player === VideoPlayer.MPV) {
+            this.dataService.sendIpcEvent(OPEN_MPV_PLAYER, payload);
+            return;
+        }
+
+        if (this.playerSettings.player === VideoPlayer.VLC) {
+            this.dataService.sendIpcEvent(OPEN_VLC_PLAYER, payload);
+        }
+    }
+
     private toLiveEpgPanelSummary(
         program: EpgProgram | null | undefined
     ): LiveEpgPanelSummary | null {

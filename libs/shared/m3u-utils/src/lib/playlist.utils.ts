@@ -110,9 +110,12 @@ function getHeaderAttribute(
 }
 
 export function getPlaylistEpgUrls(playlist: ParsedPlaylist): string[] {
-    const urls = EPG_HEADER_KEYS.flatMap((key) =>
-        normalizeUrlList(getPlaylistHeaderAttribute(playlist, key))
-    );
+    const urls = EPG_HEADER_KEYS.reduce<string[]>((acc, key) => {
+        acc.push(
+            ...normalizeUrlList(getPlaylistHeaderAttribute(playlist, key))
+        );
+        return acc;
+    }, []);
 
     return Array.from(new Set(urls));
 }
